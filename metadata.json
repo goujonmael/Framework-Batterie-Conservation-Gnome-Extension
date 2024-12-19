@@ -1,0 +1,8 @@
+{
+  "name": "Battery Control",
+  "description": "Enable conservation mode for Framework laptop with framework_tool command.",
+  "uuid": "goujonmael@gmail.com",
+  "shell-version": [
+    "46"
+  ]
+}
