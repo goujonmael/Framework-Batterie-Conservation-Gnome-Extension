@@ -38,8 +38,11 @@ const Indicator = GObject.registerClass(
             this.add_child(this._icon);
 
             this.connect('button-press-event', () => {
-                this._runCommand();
+                this._toggleChargeLimit();
             });
+
+            // Run command at initialization
+            this._runInitialCommand();
         }
 
         _toggleIcon() {
@@ -52,10 +55,18 @@ const Indicator = GObject.registerClass(
             log(`Icon changed to: ${this._icon.icon_name}`);
         }
 
-        _runCommand() {
+        _toggleChargeLimit() {
+            if (this._icon.icon_name === 'battery-full-symbolic') {
+                this._runCommand(60);
+            } else {
+                this._runCommand(100);
+            }
+        }
+
+        _runCommand(chargeLimit) {
             try {
                 let proc = Gio.Subprocess.new(
-                    ['sudo', 'framework_tool', '--charge-limit', '100', '--driver', 'portio'],
+                    ['sudo', 'framework_tool', '--charge-limit', chargeLimit.toString(), '--driver', 'portio'],
                     Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
                 );
                 proc.communicate_utf8_async(null, null, (proc, res) => {
@@ -64,10 +75,44 @@ const Indicator = GObject.registerClass(
                         log(`Command stdout: ${stdout}`);
                         log(`Command stderr: ${stderr}`);
                         if (ok && proc.get_successful()) {
-                            Main.notify(_('Notification Title'), _('Whatʼs up, folks?'));
+                            Main.notify(_('Charging Limit Set'), _('The charging limit is now set to ') + chargeLimit + '%');
                             this._toggleIcon();
                         } else {
                             log(`Command error: ${stderr}`);
+                        }
+                    } catch (e) {
+                        logError(e);
+                    }
+                });
+            } catch (e) {
+                logError(e);
+            }
+        }
+
+        _runInitialCommand() {
+            try {
+                let proc = Gio.Subprocess.new(
+                    ['sudo', 'framework_tool', '--charge-limit', '--driver', 'portio'],
+                    Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
+                );
+                proc.communicate_utf8_async(null, null, (proc, res) => {
+                    try {
+                        let [ok, stdout, stderr] = proc.communicate_utf8_finish(res);
+                        if (ok) {
+                            let match = stdout.match(/Maximum (\d+)%/);
+                            if (match) {
+                                let maxCharge = parseInt(match[1], 10);
+                                log(`Maximum charge limit: ${maxCharge}`);
+                                if (maxCharge === 100) {
+                                    this._icon.icon_name = 'battery-full-symbolic';
+                                } else {
+                                    this._icon.icon_name = 'battery-good-symbolic';
+                                }
+                            } else {
+                                log('Could not find Maximum charge limit in output');
+                            }
+                        } else {
+                            log(`Initial command error: ${stderr}`);
                         }
                     } catch (e) {
                         logError(e);
